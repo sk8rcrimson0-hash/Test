@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Object Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .controls { margin-bottom: 20px; text-align: center; }
+        .view-container {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
+        video, canvas { border-radius: 8px; }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none; /* Allows clicking "through" the canvas */
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #status { color: #aaa; margin-top: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>Object Tracker</h2>
+        <button id="startBtn">Start Camera & Tracker</button>
+        <p id="status">Wait for libraries to load...</p>
+    </div>
+
+    <div class="view-container">
+        <video id="webcam" autoplay muted playsinline width="640" height="480"></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        let model = null;
+
+        // Check if libraries are loaded
+        window.onload = () => {
+            if (typeof cocoSsd !== 'undefined') {
+                status.innerText = "Libraries loaded. Click Start.";
+            } else {
+                status.innerText = "Error: Could not load AI libraries. Check your internet.";
+            }
+        };
+
+        async function init() {
+            startBtn.disabled = true;
+            status.innerText = "Loading AI Model (COCO-SSD)...";
+
+            try {
+                // 1. Load the COCO-SSD model
+                model = await cocoSsd.load();
+                status.innerText = "Model loaded. Requesting camera...";
+
+                // 2. Setup Camera
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }, // Prefers back camera on phones
+                    audio: false
+                });
+                video.srcObject = stream;
+
+                video.onloadedmetadata = () => {
+                    status.innerText = "Tracking Active!";
+                    detectFrame();
+                };
+            } catch (err) {
+                status.innerText = "Error: " + err.message;
+                console.error(err);
+                startBtn.disabled = false;
+            }
+        }
+
+        async function detectFrame() {
+            // Perform detection
+            const predictions = await model.detect(video);
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw boxes
+            predictions.forEach(prediction => {
+                const [x, y, width, height] = prediction.bbox;
+                
+                // Color coding (Green for cars/trucks, Blue for everything else)
+                const isVehicle = ['car', 'truck', 'bus', 'motorcycle'].includes(prediction.class);
+                ctx.strokeStyle = isVehicle ? "#00FF00" : "#00BFFF";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(x, y, width, height);
+
+                // Label background
+                ctx.fillStyle = isVehicle ? "#00FF00" : "#00BFFF";
+                const textWidth = ctx.measureText(prediction.class).width;
+                ctx.fillRect(x, y - 25, textWidth + 40, 25);
+
+                // Label text
+                ctx.fillStyle = "#000";
+                ctx.font = "bold 16px Arial";
+                ctx.fillText(
+                    `${prediction.class} ${Math.round(prediction.score * 100)}%`, 
+                    x + 5, y - 7
+                );
+            });
+
+            // Loop
+            window.requestAnimationFrame(detectFrame);
+        }
+
+        startBtn.addEventListener('click', init);
+    </script>
+</body>
+</html>
