@@ -3,85 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wordle Clone</title>
+    <title>NYT Wordle Clone</title>
     <style>
         :root {
             --bg-color: #121213;
             --text-color: #ffffff;
             --tile-border: #3a3a3c;
             --key-bg: #818384;
+            --correct: #538d4e;
+            --present: #b59f3b;
+            --absent: #3a3a3c;
         }
 
         body, html {
-            margin: 0; padding: 0;
-            height: 100%;
+            margin: 0; padding: 0; height: 100%;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            display: flex; justify-content: center; align-items: center;
+            background-color: var(--bg-color); color: var(--text-color);
+            display: flex; flex-direction: column; align-items: center;
         }
 
-        /* --- Cover Screen --- */
+        /* --- Landing Page --- */
         #cover-screen {
-            background-color: #e3e3e3;
-            color: #000;
-            position: fixed; inset: 0;
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            text-align: center; z-index: 10;
+            background-color: #e3e3e3; color: #000;
+            position: fixed; inset: 0; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center; z-index: 100;
         }
 
-        .logo-box { width: 60px; height: 60px; margin-bottom: 10px; }
-        .wordle-title { font-size: 40px; font-weight: bold; margin: 10px 0; }
         .play-btn {
-            background: #000; color: #fff;
-            padding: 12px 40px; border-radius: 25px;
+            background: #000; color: #fff; padding: 12px 40px; border-radius: 25px;
             text-decoration: none; font-weight: bold; cursor: pointer;
             margin-top: 20px; border: none; font-size: 1rem;
         }
 
-        /* --- Game Screen --- */
-        #game-screen { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 500px; }
+        /* --- Game UI --- */
+        #game-screen { display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; }
+        header { width: 100%; height: 50px; border-bottom: 1px solid var(--tile-border); display: flex; justify-content: center; align-items: center; font-size: 1.5rem; font-weight: bold; }
 
-        #board {
-            display: grid;
-            grid-template-rows: repeat(6, 1fr);
-            grid-gap: 5px; padding: 10px;
-            margin-bottom: 20px;
-        }
-
+        #board-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; }
+        #board { display: grid; grid-template-rows: repeat(6, 1fr); grid-gap: 5px; }
         .row { display: grid; grid-template-columns: repeat(5, 1fr); grid-gap: 5px; }
 
         .tile {
-            width: 60px; height: 60px;
-            border: 2px solid var(--tile-border);
+            width: 58px; height: 58px; border: 2px solid var(--tile-border);
             display: flex; justify-content: center; align-items: center;
             font-size: 2rem; font-weight: bold; text-transform: uppercase;
+            transition: transform 0.2s;
         }
+        .tile[data-state="active"] { border-color: #565758; }
 
-        /* --- Keyboard --- */
-        #keyboard { width: 100%; padding: 0 10px; }
-        .kb-row { display: flex; justify-content: center; margin-bottom: 8px; }
+        /* Colors */
+        .tile[data-state="correct"] { background-color: var(--correct); border: none; }
+        .tile[data-state="present"] { background-color: var(--present); border: none; }
+        .tile[data-state="absent"] { background-color: var(--absent); border: none; }
+
+        /* Keyboard */
+        #keyboard { width: 100%; max-width: 500px; padding: 10px; margin-bottom: 10px; }
+        .kb-row { display: flex; justify-content: center; margin-bottom: 8px; touch-action: manipulation; }
         .key {
-            background: var(--key-bg);
-            border: 0; border-radius: 4px;
-            margin: 0 3px; padding: 15px 12px;
-            color: #fff; font-weight: bold; cursor: pointer;
-            user-select: none; flex: 1; text-transform: uppercase;
+            background: var(--key-bg); border: 0; border-radius: 4px;
+            margin: 0 3px; height: 58px; color: #fff; font-weight: bold;
+            cursor: pointer; flex: 1; display: flex; justify-content: center; align-items: center;
         }
+        .key.wide { flex: 1.5; font-size: 0.8rem; }
     </style>
 </head>
 <body>
 
     <div id="cover-screen">
-        <div class="wordle-title">Wordle</div>
+        <div style="font-size: 3rem; font-weight: bold; margin-bottom: 0;">Wordle</div>
         <p>Get 6 chances to guess a<br>5-letter word.</p>
         <button class="play-btn" onclick="startGame()">Play</button>
-        <p style="font-size: 0.8rem; margin-top: 40px;">February 5, 2026<br>Edited by Tracy Bennett</p>
     </div>
 
     <div id="game-screen">
-        <div id="board"></div>
+        <header>Wordle</header>
+        <div id="board-container">
+            <div id="board"></div>
+        </div>
         <div id="keyboard">
             <div class="kb-row" id="row1"></div>
             <div class="kb-row" id="row2"></div>
@@ -89,42 +87,130 @@
         </div>
     </div>
 
-    <script>
+<script>
+    const SECRET_WORD = "CLONE"; // You can change this or randomize it from a list
+    let currentRow = 0;
+    let currentCol = 0;
+    let currentGuess = "";
+    let gameOver = false;
+
+    const rows = ["QWERTYUIOP", "ASDFGHJKL", "ENTERZXCVBNM⌫"];
+
+    function startGame() {
+        document.getElementById('cover-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'flex';
+        initBoard();
+        initKeyboard();
+        setupInputListeners();
+    }
+
+    function initBoard() {
         const board = document.getElementById('board');
-        const rows = ["QWERTYUIOP", "ASDFGHJKL", "ENTERZXCVBNM⌫"];
-
-        function startGame() {
-            document.getElementById('cover-screen').style.display = 'none';
-            document.getElementById('game-screen').style.display = 'flex';
-            initBoard();
-            initKeyboard();
-        }
-
-        function initBoard() {
-            for (let i = 0; i < 6; i++) {
-                let rowDiv = document.createElement("div");
-                rowDiv.className = "row";
-                for (let j = 0; j < 5; j++) {
-                    let tile = document.createElement("div");
-                    tile.className = "tile";
-                    rowDiv.appendChild(tile);
-                }
-                board.appendChild(rowDiv);
+        for (let i = 0; i < 6; i++) {
+            let rowDiv = document.createElement("div");
+            rowDiv.className = "row";
+            for (let j = 0; j < 5; j++) {
+                let tile = document.createElement("div");
+                tile.className = "tile";
+                tile.id = `tile-${i}-${j}`;
+                rowDiv.appendChild(tile);
             }
+            board.appendChild(rowDiv);
         }
+    }
 
-        function initKeyboard() {
-            rows.forEach((row, i) => {
-                const rowEl = document.getElementById(`row${i+1}`);
-                row.split('').forEach(char => {
-                    const btn = document.createElement('button');
-                    btn.className = 'key';
-                    btn.textContent = char === '⌫' ? 'DEL' : char;
-                    rowEl.appendChild(btn);
-                });
+    function initKeyboard() {
+        rows.forEach((row, rowIndex) => {
+            const rowEl = document.getElementById(`row${rowIndex+1}`);
+            row.split('').forEach(char => {
+                const btn = document.createElement('button');
+                btn.className = 'key';
+                if (char === 'ENTER' || char === '⌫') btn.classList.add('wide');
+                btn.textContent = char === '⌫' ? 'DELETE' : char;
+                btn.onclick = () => handleInput(char === '⌫' ? 'BACKSPACE' : char);
+                rowEl.appendChild(btn);
             });
+        });
+    }
+
+    function setupInputListeners() {
+        window.addEventListener('keydown', (e) => {
+            handleInput(e.key.toUpperCase());
+        });
+    }
+
+    function handleInput(key) {
+        if (gameOver) return;
+
+        if (key === 'ENTER' || key === 'RETURN') {
+            submitGuess();
+        } else if (key === 'BACKSPACE' || key === '⌫') {
+            deleteLetter();
+        } else if (/^[A-Z]$/.test(key)) {
+            addLetter(key);
         }
-    </script>
+    }
+
+    function addLetter(letter) {
+        if (currentGuess.length < 5) {
+            currentGuess += letter;
+            const tile = document.getElementById(`tile-${currentRow}-${currentCol}`);
+            tile.textContent = letter;
+            tile.setAttribute('data-state', 'active');
+            currentCol++;
+        }
+    }
+
+    function deleteLetter() {
+        if (currentGuess.length > 0) {
+            currentCol--;
+            currentGuess = currentGuess.slice(0, -1);
+            const tile = document.getElementById(`tile-${currentRow}-${currentCol}`);
+            tile.textContent = "";
+            tile.removeAttribute('data-state');
+        }
+    }
+
+    function submitGuess() {
+        if (currentGuess.length !== 5) return;
+
+        const rowTiles = document.querySelectorAll(`#board .row`)[currentRow].children;
+        const guessArr = currentGuess.split("");
+        const secretArr = SECRET_WORD.split("");
+
+        // Pass 1: Mark Correct (Green)
+        guessArr.forEach((letter, i) => {
+            if (letter === secretArr[i]) {
+                rowTiles[i].setAttribute('data-state', 'correct');
+                secretArr[i] = null; // Mark as used
+            }
+        });
+
+        // Pass 2: Mark Present/Absent
+        guessArr.forEach((letter, i) => {
+            if (rowTiles[i].getAttribute('data-state') === 'correct') return;
+
+            if (secretArr.includes(letter)) {
+                rowTiles[i].setAttribute('data-state', 'present');
+                secretArr[secretArr.indexOf(letter)] = null;
+            } else {
+                rowTiles[i].setAttribute('data-state', 'absent');
+            }
+        });
+
+        if (currentGuess === SECRET_WORD) {
+            alert("Magnificent!");
+            gameOver = true;
+        } else if (currentRow === 5) {
+            alert(`Game Over! The word was ${SECRET_WORD}`);
+            gameOver = true;
+        } else {
+            currentRow++;
+            currentCol = 0;
+            currentGuess = "";
+        }
+    }
+</script>
 </body>
 </html>
 
